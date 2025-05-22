@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Socket Chat</title>
+    <style>
+      :root {
+        --primary-color: #4361ee;
+        --secondary-color: #3f37c9;
+        --accent-color: #4895ef;
+        --light-color: #f8f9fa;
+        --dark-color: #212529;
+        --success-color: #4cc9f0;
+        --danger-color: #f72585;
+        --border-radius: 8px;
+        --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: var(--dark-color);
+        background-color: #f5f7fa;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: var(--border-radius);
+        box-shadow: var(--box-shadow);
+        overflow: hidden;
+      }
+
+      header {
+        background: var(--primary-color);
+        color: white;
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .status {
+        font-size: 0.9rem;
+        background: rgba(255, 255, 255, 0.2);
+        padding: 3px 8px;
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+      }
+
+      .status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 6px;
+      }
+      .video-container {
+        display: flex;
+        gap: 10px;
+        padding: 10px;
+      }
+      video {
+        width: 300px;
+        height: 225px;
+        border-radius: var(--border-radius);
+        background: var(--dark-color);
+      }
+      .call-controls {
+        margin: 20px;
+        display: flex;
+        gap: 10px;
+      }
+      .status.connected .status-indicator {
+        background: #4ade80;
+      }
+
+      .status.disconnected .status-indicator {
+        background: #f87171;
+      }
+
+      .chat-container {
+        display: flex;
+        flex-direction: column;
+        height: 500px;
+      }
+
+      #log {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+      }
+
+      .message {
+        margin-bottom: 15px;
+        display: flex;
+        flex-direction: column;
+        max-width: 80%;
+      }
+
+      .message.received {
+        align-items: flex-start;
+      }
+
+      .message.sent {
+        align-items: flex-end;
+        margin-left: auto;
+      }
+
+      .message-content {
+        padding: 10px 15px;
+        border-radius: var(--border-radius);
+        position: relative;
+        word-wrap: break-word;
+      }
+
+      .message.received .message-content {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-top-left-radius: 0;
+      }
+
+      .message.sent .message-content {
+        background: var(--primary-color);
+        color: white;
+        border-top-right-radius: 0;
+      }
+
+      .message-time {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin-top: 4px;
+      }
+
+      .message.sent .message-time {
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .input-area {
+        display: flex;
+        padding: 15px;
+        background: white;
+      }
+
+      #msg {
+        flex: 1;
+        padding: 10px 15px;
+        border: 1px solid #ced4da;
+        border-radius: var(--border-radius);
+        font-size: 1rem;
+        margin-right: 10px;
+        transition: border-color 0.3s;
+      }
+
+      #msg:focus {
+        outline: none;
+        border-color: var(--accent-color);
+      }
+
+      button {
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: var(--border-radius);
+        cursor: pointer;
+        font-weight: 500;
+        transition: background 0.3s;
+      }
+
+      button:hover {
+        background: var(--secondary-color);
+      }
+
+      button:disabled {
+        background: #adb5bd;
+        cursor: not-allowed;
+      }
+
+      .typing-indicator {
+        padding: 0 20px 10px;
+        font-size: 0.85rem;
+        color: #6c757d;
+        font-style: italic;
+        height: 20px;
+      }
+
+      @media (max-width: 600px) {
+        .container {
+          border-radius: 0;
+        }
+
+        .chat-container {
+          height: calc(100vh - 40px);
+        }
+
+        .message {
+          max-width: 90%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>WebSocket Chat</h1>
+        <div class="status disconnected" id="connection-status">
+          <span class="status-indicator"></span>
+          <span>Disconnected</span>
+        </div>
+      </header>
+
+      <div class="chat-container">
+        <div id="log"></div>
+        <div class="typing-indicator" id="typing-indicator"></div>
+        <div class="input-area">
+          <input
+            id="msg"
+            type="text"
+            placeholder="Type your message..."
+            autocomplete="off"
+          />
+          <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
+        </div>
+      </div>
+    </div>
+    <div class="video-container">
+      <video id="localVideo" autoplay muted></video>
+      <video id="remoteVideo" autoplay></video>
+    </div>
+    <div class="call-controls">
+      <button id="startCall">Start Call</button>
+      <button id="endCall" disabled>End Call</button>
+    </div>
+    <script>
+      // DOM Elements
+      const log = document.getElementById("log");
+      const msgInput = document.getElementById("msg");
+      const sendBtn = document.getElementById("send-btn");
+      const statusElement = document.getElementById("connection-status");
+      const typingIndicator = document.getElementById("typing-indicator");
+
+      // WebSocket connection
+      let socket;
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 5;
+      const reconnectDelay = 3000; // 3 seconds
+
+      function connect() {
+        //using ws instead of wss to avoid encryption to make it easier to test
+        socket = new WebSocket("ws://" + location.host);
+
+        socket.onopen = () => {
+          updateStatus("connected");
+          reconnectAttempts = 0;
+          sendBtn.disabled = false;
+        };
+        socket.onmessage = (e) => {
+          const data = JSON.parse(e.data);
+
+          // 1) INIT: show your own client ID
+          if (data.type === "init") {
+            document.getElementById("connection-status").insertAdjacentHTML(
+              "beforeend",
+              `<span style="margin-left:1em;font-size:0.8em;">
+               Your ID: <code>${data.clientId}</code>
+             </span>`
+            );
+            return;
+          }
+
+          // 2) SIGNALING: WebRTC offer/answer/candidate/call-request
+          if (
+            ["offer", "answer", "candidate", "call-request"].includes(data.type)
+          ) {
+            handleSignal(data);
+            return;
+          }
+
+          // 3) CHAT + TYPING
+          if (data.type === "message") {
+            addMessage(data.content, data.sender, data.timestamp, false);
+          } else if (data.type === "typing") {
+            showTypingIndicator(data.sender);
+          }
+        };
+        socket.onclose = () => {
+          updateStatus("disconnected");
+          sendBtn.disabled = true;
+
+          if (reconnectAttempts < maxReconnectAttempts) {
+            setTimeout(connect, reconnectDelay);
+            reconnectAttempts++;
+          }
+        };
+
+        socket.onerror = (error) => {
+          console.error("WebSocket error:", error);
+        };
+      }
+
+      // Initial connection
+      connect();
+
+      // Message functions
+      function sendMessage() {
+        const message = msgInput.value.trim();
+        if (message && socket.readyState === WebSocket.OPEN) {
+          const timestamp = new Date().toISOString();
+
+          // Add message to UI immediately
+          addMessage(message, "You", timestamp, true);
+
+          // Send to server
+          socket.send(
+            JSON.stringify({
+              type: "message",
+              content: message,
+              timestamp: timestamp,
+            })
+          );
+
+          msgInput.value = "";
+        }
+      }
+
+      function addMessage(content, sender, timestamp, isSent) {
+        const messageElement = document.createElement("div");
+        messageElement.className = `message ${isSent ? "sent" : "received"}`;
+
+        const contentElement = document.createElement("div");
+        contentElement.className = "message-content";
+        contentElement.textContent = content;
+
+        const metaElement = document.createElement("div");
+        metaElement.className = "message-meta";
+
+        const senderElement = document.createElement("span");
+        senderElement.className = "message-sender";
+        senderElement.textContent = sender;
+
+        const timeElement = document.createElement("span");
+        timeElement.className = "message-time";
+        timeElement.textContent = formatTime(timestamp);
+
+        metaElement.appendChild(senderElement);
+        metaElement.appendChild(document.createTextNode(" • "));
+        metaElement.appendChild(timeElement);
+
+        messageElement.appendChild(contentElement);
+        messageElement.appendChild(metaElement);
+
+        log.appendChild(messageElement);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      // Typing indicator
+      let typingTimeout;
+      msgInput.addEventListener("input", () => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "typing", sender: "Someone" }));
+
+          clearTimeout(typingTimeout);
+          typingTimeout = setTimeout(() => {
+            typingIndicator.textContent = "";
+          }, 2000);
+        }
+      });
+
+      function showTypingIndicator(sender) {
+        typingIndicator.textContent = `${sender} is typing...`;
+
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+          typingIndicator.textContent = "";
+        }, 2000);
+      }
+
+      // Helper functions
+      function updateStatus(status) {
+        statusElement.className = `status ${status}`;
+        statusElement.querySelector("span:last-child").textContent =
+          status === "connected" ? "Connected" : "Disconnected";
+      }
+
+      function formatTime(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
+      // Send message on Enter key
+      msgInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          sendMessage();
+        }
+      });
+
+      // WebRTC Configuration
+      const configuration = {
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      };
+
+      // DOM Elements
+      const localVideo = document.getElementById("localVideo");
+      const remoteVideo = document.getElementById("remoteVideo");
+      const startCallButton = document.getElementById("startCall");
+      const endCallButton = document.getElementById("endCall");
+
+      let peerConnection;
+      let localStream;
+      let currentCallTarget = null;
+      // disable until camera/mic is ready
+      startCallButton.disabled = true;
+      // Initialize media
+      async function setupMedia() {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+          localVideo.srcObject = localStream;
+          startCallButton.disabled = false;
+        } catch (err) {
+          console.error("Error accessing media devices:", err);
+        }
+      }
+
+      // Initialize call
+      async function startCall(targetClientId) {
+        try {
+          peerConnection = new RTCPeerConnection(configuration);
+
+          // Add local stream
+          localStream.getTracks().forEach((track) => {
+            peerConnection.addTrack(track, localStream);
+          });
+
+          // ICE Candidate handling
+          peerConnection.onicecandidate = ({ candidate }) => {
+            console.log("[ICE] local candidate:", candidate);
+            +console.log("[ICE] local candidate:", candidate);
+            if (candidate) {
+              socket.send(
+                JSON.stringify({
+                  type: "candidate",
+                  target: currentCallTarget,
+                  payload: candidate,
+                })
+              );
+              console.log("[SIGNAL] sent candidate to", currentCallTarget);
+            }
+          };
+
+          // Remote stream handling
+          peerConnection.ontrack = (event) => {
+            remoteVideo.srcObject = event.streams[0];
+          };
+
+          // Create offer
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          console.log("[SDP] created offer:", offer.sdp?.slice(0, 30) + "…");
+          socket.send(
+            JSON.stringify({
+              type: "offer",
+              target: currentCallTarget,
+              payload: offer,
+            })
+          );
+          console.log("[SIGNAL] sent OFFER to", currentCallTarget);
+          startCallButton.disabled = true;
+          endCallButton.disabled = false;
+        } catch (err) {
+          console.error("Call setup error:", err);
+        }
+      }
+
+      // End call
+      function endCall() {
+        if (peerConnection) {
+          peerConnection.close();
+          peerConnection = null;
+        }
+        remoteVideo.srcObject = null;
+        endCallButton.disabled = true;
+        currentCallTarget = null;
+      }
+
+      // Handle incoming signals
+      function handleSignal(message) {
+        switch (message.type) {
+          case "offer":
+            handleOffer(message);
+            break;
+          case "answer":
+            handleAnswer(message);
+            break;
+          case "candidate":
+            handleCandidate(message);
+            break;
+          case "call-request":
+            handleCallRequest(message);
+            break;
+        }
+      }
+
+      async function handleOffer(message) {
+        console.log(
+          "[SIGNAL] received OFFER from",
+          message.sender,
+          message.payload.sdp?.slice(0, 30) + "…"
+        );
+        if (!confirm(`Accept call from ${message.sender}?`)) return;
+
+        peerConnection = new RTCPeerConnection(configuration);
+        currentCallTarget = message.sender;
+
+        // Add local stream
+        localStream.getTracks().forEach((track) => {
+          peerConnection.addTrack(track, localStream);
+        });
+
+        peerConnection.onicecandidate = ({ candidate }) => {
+          if (candidate) {
+            socket.send(
+              JSON.stringify({
+                type: "candidate",
+                target: currentCallTarget,
+                payload: candidate,
+              })
+            );
+          }
+        };
+
+        peerConnection.ontrack = (event) => {
+          remoteVideo.srcObject = event.streams[0];
+        };
+
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(message.payload)
+        );
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        socket.send(
+          JSON.stringify({
+            type: "answer",
+            target: currentCallTarget,
+            payload: answer,
+          })
+        );
+
+        startCallButton.disabled = true;
+        endCallButton.disabled = false;
+      }
+
+      async function handleAnswer(message) {
+        console.log("[SIGNAL] received ANSWER from", message.sender);
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(message.payload)
+        );
+        console.log("[SDP] remote description set (answer)");
+      }
+      async function handleCandidate(message) {
+        +console.log(
+          "[SIGNAL] got candidate from",
+          message.sender,
+          message.payload
+        );
+        try {
+          await peerConnection.addIceCandidate(
+            new RTCIceCandidate(message.payload)
+          );
+          console.log("[ICE] added candidate from", message.sender);
+        } catch (err) {
+          console.error("Error adding ICE candidate:", err);
+        }
+      }
+
+      function handleCallRequest(message) {
+        if (confirm(`${message.sender} wants to video chat. Accept?`)) {
+          // Remember who’s calling, so when their offer arrives we know where to send our answer
+          currentCallTarget = message.sender;
+          // → DO NOT call startCall(); the incoming offer handler will take care of creating the answer.
+        }
+      }
+
+      // Event listeners
+      startCallButton.addEventListener("click", async () => {
+        // You'd normally select a user from a list here
+        const targetClientId = prompt("Enter client ID to call:");
+        if (targetClientId) {
+          currentCallTarget = targetClientId;
+          socket.send(
+            JSON.stringify({
+              type: "call-request",
+              target: targetClientId,
+            })
+          );
+          await startCall(targetClientId);
+        }
+      });
+
+      endCallButton.addEventListener("click", endCall);
+
+      // Initialize
+      setupMedia();
+    </script>
+  </body>
+</html>
