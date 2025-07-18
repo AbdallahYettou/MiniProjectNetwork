@@ -1,4 +1,4 @@
-# 💬 Mini Project: WebSocket Chat & Video Call
+# 💬 Mini Project: WebSocket Chat & Video Call (from scratch)
 
 A simple real-time chat app with peer-to-peer video calling using vanilla JavaScript and a custom Node.js WebSocket server.
 
